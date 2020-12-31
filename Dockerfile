@@ -84,6 +84,7 @@ RUN rm -rf /var/cache/apk/* /tmp/*
 FROM alpine:latest
 LABEL "MAINTAINER"="Farshid Ashouri <farsheed.ashouri@gmail.com>"
 LABEL "FFMPEG_VERSION"="latest"
+LABEL "FFMPEG_TIER"="non-free"
 ENV PATH=/opt/ffmpeg/bin:$PATH
 
 RUN apk add --update \

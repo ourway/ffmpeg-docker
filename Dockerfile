@@ -82,7 +82,8 @@ RUN rm -rf /var/cache/apk/* /tmp/*
 ##########################
 # Build the release image.
 FROM alpine:latest
-LABEL MAINTAINER Farshid Ashouri <farsheed.ashouri@gmail.com>
+LABEL "MAINTAINER"="Farshid Ashouri <farsheed.ashouri@gmail.com>"
+LABEL "FFMPEG_VERSION"="latest"
 ENV PATH=/opt/ffmpeg/bin:$PATH
 
 RUN apk add --update \

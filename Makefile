@@ -6,7 +6,7 @@ FULL_IMAGE_NAME = $(if $(DOCKER_REGISTRY),$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_NAME
 
 # Build arguments
 BUILD_ARGS =
-MAKEFLAGS_ARG ?= -j$(shell nproc)
+MAKEFLAGS_ARG ?= -j$(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
 
 # Container runtime arguments
 CONTAINER_NAME ?= ffmpeg-container

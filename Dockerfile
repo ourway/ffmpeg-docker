@@ -1,6 +1,6 @@
 ###############################
 # Build the FFmpeg-build image.
-FROM alpine:latest as build
+FROM alpine:latest AS build
 
 
 ARG PREFIX=/opt/ffmpeg
@@ -63,10 +63,9 @@ RUN cd /tmp/ffmpeg && \
   --enable-libwebp \
   --enable-librtmp \
   --enable-librav1e \
-  --enable-postproc \
-  --enable-avresample \
   --enable-libfreetype \
   --enable-openssl \
+  --enable-swresample \
   --disable-debug \
   --disable-doc \
   --disable-ffplay \

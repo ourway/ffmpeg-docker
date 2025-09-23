@@ -1,59 +1,75 @@
-###############################
-# Build the FFmpeg-build image.
-FROM alpine:latest AS build
+################################################################################
+# Build Stage: Compile all dependencies and a static FFmpeg binary
+################################################################################
+FROM alpine:3.20 AS build
 
-
+# Define the installation prefix for all our compiled libraries and for FFmpeg
 ARG PREFIX=/opt/ffmpeg
-ARG LD_LIBRARY_PATH=/opt/ffmpeg/lib
-ARG MAKEFLAGS="-j4"
+ENV PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig"
 
-# FFmpeg build dependencies.
-RUN apk add --update \
+# Install build tools and FFmpeg's library dependencies (the -dev packages)
+# autoconf, automake, and libtool are needed to build fdk-aac from source
+# harfbuzz-dev, fribidi-dev, and graphite2-dev are required for static libass
+RUN apk add --update --no-cache \
   build-base \
   coreutils \
+  autoconf \
+  automake \
+  libtool \
   freetype-dev \
   gcc \
   lame-dev \
   libogg-dev \
-  libass \
   libass-dev \
+  harfbuzz-dev \
+  fribidi-dev \
+  graphite2-dev \
   libvpx-dev \
   libvorbis-dev \
   libwebp-dev \
   libtheora-dev \
   opus-dev \
-  openssl \
   openssl-dev \
   pkgconf \
-  pkgconfig \
   rtmpdump-dev \
   wget \
   tar \
   x264-dev \
   x265-dev \
-  yasm
+  yasm \
+  nasm \
+  git \
+  rav1e-dev \
+  zlib-dev
 
-# Get fdk-aac from community.
-RUN echo http://dl-cdn.alpinelinux.org/alpine/edge/community >> /etc/apk/repositories && \
-  apk add --update fdk-aac-dev
+# 1. Compile fdk-aac from source (to avoid using the 'edge' repository)
+RUN cd /tmp && \
+    git clone https://github.com/mstorsjo/fdk-aac.git && \
+    cd fdk-aac && \
+    ./autogen.sh && \
+    ./configure --prefix="${PREFIX}" --disable-shared && \
+    make -j$(nproc) && \
+    make install
 
-# Get rav1e from testing.
-RUN echo http://dl-cdn.alpinelinux.org/alpine/edge/testing >> /etc/apk/repositories && \
-  apk add --update rav1e-dev
+# 2. Get FFmpeg source
+RUN cd /tmp && \
+  wget https://ffmpeg.org/releases/ffmpeg-snapshot.tar.bz2 && \
+  tar xf ffmpeg-snapshot.tar.bz2 && \
+  rm ffmpeg-snapshot.tar.bz2
 
-# Get ffmpeg source.
-RUN cd /tmp && wget https://ffmpeg.org/releases/ffmpeg-snapshot.tar.bz2 && tar xf ffmpeg-snapshot.tar.bz2 && rm ffmpeg-snapshot.tar.bz2
-
-# Compile ffmpeg.
+# 3. Compile a fully static FFmpeg binary
 RUN cd /tmp/ffmpeg && \
+  export PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig:/usr/lib/pkgconfig" && \
   ./configure \
-  --enable-version3 \
+  --prefix="${PREFIX}" \
+  --pkg-config-flags="--static" \
+  --extra-cflags="-I${PREFIX}/include" \
+  --extra-ldflags="-L${PREFIX}/lib" \
+  --extra-libs="-lpthread -lm" \
   --enable-gpl \
   --enable-nonfree \
-  --enable-small \
   --enable-libmp3lame \
   --enable-libx264 \
-  --enable-libx265 \
   --enable-libvpx \
   --enable-libtheora \
   --enable-libvorbis \
@@ -61,49 +77,27 @@ RUN cd /tmp/ffmpeg && \
   --enable-libfdk-aac \
   --enable-libass \
   --enable-libwebp \
-  --enable-librtmp \
   --enable-librav1e \
   --enable-libfreetype \
   --enable-openssl \
-  --enable-swresample \
-  --disable-debug \
-  --disable-doc \
   --disable-ffplay \
-  --extra-cflags="-I${PREFIX}/include" \
-  --extra-ldflags="-L${PREFIX}/lib" \
-  --extra-libs="-lpthread -lm" \
-  --prefix="${PREFIX}" && \
-  make && make install && make distclean
+  --disable-doc \
+  --disable-debug \
+  --disable-shared \
+  --enable-static && \
+  make -j$(nproc) && \
+  make install
 
-# Cleanup.
-RUN rm -rf /var/cache/apk/* /tmp/*
+################################################################################
+# Final Stage: Create a minimal image with the binary
+################################################################################
+FROM alpine:3.20
 
-##########################
-# Build the release image.
-FROM alpine:latest
-LABEL "MAINTAINER"="Farshid Ashouri <farsheed.ashouri@gmail.com>"
-LABEL "FFMPEG_VERSION"="latest"
-LABEL "FFMPEG_TIER"="non-free"
-ENV PATH=/opt/ffmpeg/bin:$PATH
+# Copy the self-contained, static FFmpeg binary from the build stage
+COPY --from=build /opt/ffmpeg/bin/ffmpeg /ffmpeg
 
-RUN apk add --update \
-  ca-certificates \
-  openssl \
-  pcre \
-  lame \
-  libogg \
-  libass \
-  libvpx \
-  libvorbis \
-  libwebp \
-  libtheora \
-  opus \
-  rtmpdump \
-  x264-dev \
-  x265-dev
+# Set the binary as the entrypoint
+ENTRYPOINT ["/ffmpeg"]
 
-COPY --from=build /opt/ffmpeg /opt/ffmpeg
-COPY --from=build /usr/lib/libfdk-aac.so.2 /usr/lib/libfdk-aac.so.2
-COPY --from=build /usr/lib/librav1e.so.0 /usr/lib/librav1e.so.0
-
-CMD ["/usr/local/bin/ffmpeg"]
+# The default command is to show the help text
+CMD ["-h"]
